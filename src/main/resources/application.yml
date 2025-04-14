@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: Assessment
+aws:
+  dynamodb:
+    region: us-east-1
+logging:
+  level:
+    root: INFO
+    com.payaza.assessment: DEBUG

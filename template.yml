@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Real-time messaging app with WebSocket and HTTP APIs
+
+Resources:
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Connections
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Users
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: WebSocketApi
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  UserHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: target/Assessment-1.0-SNAPSHOT.jar
+      Handler: com.payaza.assessment.handler.UserHandler
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 30
+      Events:
+        Register:
+          Type: Api
+          Properties:
+            Path: /register
+            Method: POST
+        Login:
+          Type: Api
+          Properties:
+            Path: /login
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: Users
+      Environment:
+        Variables:
+          SPRING_PROFILES_ACTIVE: aws
+
+  WebSocketHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: target/Assessment-1.0-SNAPSHOT.jar
+      Handler: com.payaza.assessment.handler.WebSocketHandler
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 30
+      Events:
+        Connect:
+          Type: WebSocket
+          Properties:
+            ApiId: !Ref WebSocketApi
+            RouteKey: $connect
+        Disconnect:
+          Type: WebSocket
+          Properties:
+            ApiId: !Ref WebSocketApi
+            RouteKey: $disconnect
+        SendMessage:
+          Type: WebSocket
+          Properties:
+            ApiId: !Ref WebSocketApi
+            RouteKey: sendMessage
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: Connections
+        - Statement:
+            - Sid: ApiGatewayManagementApi
+              Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/prod/POST/@connections/*
+      Environment:
+        Variables:
+          SPRING_PROFILES_ACTIVE: aws
+          API_ID: !Ref WebSocketApi
+          STAGE: prod
+
+Outputs:
+  WebSocketURI:
+    Description: WebSocket URI for the messaging app
+    Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod

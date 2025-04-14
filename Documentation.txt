@@ -1,0 +1,218 @@
+Documentation: Real-Time Messaging Application
+
+1. Overview
+Purpose:
+
+This application provides a serverless, real-time, one-to-one chat system similar to WhatsApp, allowing users to register, log in, connect via WebSocket, and exchange messages securely. It leverages AWS services for scalability, Spring Boot for dependency injection, and JWT for authentication.
+
+Key Features:
+
+User Management: Register and log in users, storing credentials securely in DynamoDB.
+WebSocket Messaging: Establish real-time connections, send/receive messages between users.
+Authentication: Validate users with JWT tokens during WebSocket connection.
+Scalability: Serverless architecture with AWS Lambda and API Gateway for automatic scaling.
+Persistence: Store connections and user data in DynamoDB with efficient indexing.
+Components:
+
+WebSocketHandler: Routes WebSocket events ($connect, $disconnect, sendMessage).
+MessageService: Manages connections (store/remove) and sends messages via API Gateway.
+UserService/UserHandler: Handles REST API for user registration and login.
+JwtUtil: Generates and validates JWT tokens.
+DynamoDB Tables:
+Connections: Maps WebSocket connectionId to userId (GSI: UserIdIndex).
+Users: Stores user credentials.
+API Gateway:
+WebSocket API for real-time messaging.
+REST API for user management.
+2. Clarity of Approach
+The application follows a serverless, event-driven architecture to ensure scalability, cost-efficiency, and real-time performance. Below is a detailed breakdown of the approach, explaining why each choice was made and how it fits together.
+
+2.1 Architecture
+
+Serverless with AWS Lambda:
+Why: Eliminates server management, scales automatically with demand, and charges only for usage.
+How: Lambda functions handle WebSocket events (WebSocketHandler) and REST requests (UserHandler). Each function is stateless, relying on DynamoDB for persistence.
+Components:
+WebSocketHandler: Processes $connect (authenticates via JWT, stores connection), $disconnect (removes connection), and sendMessage (sends messages).
+MessageService: Queries UserIdIndex to find recipient connections, sends messages via API Gateway.
+UserHandler: Manages /register and /login endpoints, storing users in DynamoDB.
+API Gateway WebSocket:
+Why: Provides a managed WebSocket protocol for real-time, bidirectional communication.
+How: Routes events to WebSocketHandler based on routeKey. Uses ApiGatewayManagementApiClient to send messages to connected clients.
+Setup: Configured with routes ($connect, $disconnect, sendMessage) and an endpoint (e.g., wss://<ws-api-id>.execute-api.<region>.amazonaws.com/prod).
+DynamoDB:
+Why: NoSQL database for low-latency, scalable storage of connections and users.
+How:
+Connections Table:
+Primary Key: connectionId (String).
+GSI: UserIdIndex on userId to query connections by user.
+Stores WebSocket sessions.
+Users Table:
+Primary Key: username (String).
+Stores hashed passwords.
+Enhanced DynamoDB SDK simplifies mapping to Java objects (Connection, User).
+Spring Boot DI:
+Why: Organizes dependencies (MessageService, JwtUtil, ObjectMapper) cleanly, improving testability.
+How: @Service and @Component annotations enable injection into WebSocketHandler and UserHandler.
+JWT Authentication:
+Why: Secures WebSocket connections by verifying user identity.
+How: JwtUtil validates tokens on $connect, extracting userId. Tokens are issued on /login.
+2.2 Workflow
+
+User Registration/Login:
+Client sends POST to /register or /login via REST API.
+UserHandler → UserService stores/checks credentials in Users table.
+/login returns a JWT token.
+WebSocket Connection:
+Client connects to wss://<ws-api-id>.../prod?token=<jwt> ($connect).
+WebSocketHandler validates JWT, calls MessageService.storeConnection to save connectionId and userId in Connections table.
+On $disconnect, MessageService.removeConnection deletes the entry.
+Messaging:
+Client sends {"action": "sendMessage", "message": "...", "recipient": "..."}.
+WebSocketHandler parses JSON, calls MessageService.sendMessage.
+MessageService:
+Queries UserIdIndex for recipient’s connectionId(s).
+Sends message to each connection via ApiGatewayManagementApiClient.
+Removes stale connections on failure.
+Error Handling:
+Invalid JWT → reject $connect.
+Missing JSON fields → fail sendMessage.
+DynamoDB/API Gateway errors → logged, connections cleaned up.
+2.3 Design Principles
+
+Scalability: Lambda and DynamoDB scale with user load. API Gateway handles WebSocket connections efficiently.
+Resilience: Removes stale connections, logs errors for debugging.
+Security: JWT ensures only authenticated users connect. Passwords are hashed (assumed in UserService).
+Testability: Spring DI allows mocking (MessageServiceTest uses ConnectionQueryProvider).
+Cost-Effectiveness: Serverless minimizes costs for low/medium traffic.
+2.4 Key Code Components
+
+MessageService:
+Stores connections (putItem), removes them (deleteItem), and queries UserIdIndex for messaging.
+Uses ApiGatewayManagementApiClient for real-time delivery.
+Handles errors by removing failed connections.
+WebSocketHandler:
+Routes WebSocket events, validates JWT, and delegates to MessageService.
+Parses JSON for sendMessage actions.
+DynamoDB Schema:
+Connections: Ensures fast lookups by connectionId and userId.
+Users: Supports unique usernames and secure credential storage.
+
+3. Setup Instructions
+Below are detailed steps to set up, build, test, and deploy the application locally and on AWS.
+
+3.1 Prerequisites
+
+Java 17: Required for AWS SDK and Spring Boot.
+Maven 3.8+: For dependency management and building.
+AWS CLI: Configured with credentials (aws configure).
+IAM role with permissions for Lambda, API Gateway, DynamoDB, CloudFormation.
+SAM CLI: For local testing and deployment.
+wscat: For WebSocket testing (npm install -g wscat).
+IDE: IntelliJ IDEA or VS Code (recommended for debugging).
+
+##Deploying to AWS
+
+Package the Application: mvn clean package
+
+Deploy with SAM: sam deploy --guided
+
+Stack Name: e.g., websocket-chat-app. Region: e.g., us-east-1. Capabilities: CAPABILITY_IAM, CAPABILITY_NAMED_IAM. Follow prompts to configure (accept defaults for most). Outputs: RestApiId: For /register, /login. WebSocketApiId: For WebSocket connections. Note Outputs: After deployment, check Outputs in the AWS CloudFormation console or CLI: aws cloudformation describe-stacks --stack-name websocket-chat-app --query "Stacks[0].Outputs"
+
+Save RestApiId and WebSocketApiId. Testing the Application
+
+Test REST Endpoints Register a User:
+curl -X POST https://.execute-api..amazonaws.com/prod/register
+-H "Content-Type: application/json"
+-d '{"username": "userA", "password": "pass"}' Expected: {"message": "User registered successfully"}
+
+Register Another User: curl -X POST https://.execute-api..amazonaws.com/prod/register
+-H "Content-Type: application/json"
+-d '{"username": "userB", "password": "pass"}'
+
+Login (Get JWT): curl -X POST https://.execute-api..amazonaws.com/prod/login
+-H "Content-Type: application/json"
+-d '{"username": "userA", "password": "pass"}' Expected: {"token": "<jwt-userA>"} Save <jwt-userA> for WebSocket.
+
+Login for userB: curl -X POST https://.execute-api..amazonaws.com/prod/login
+-H "Content-Type: application/json"
+-d '{"username": "userB", "password": "pass"}' Save <jwt-userB>.
+
+Test WebSocket Connections Connect as userA: wscat -c "wss://.execute-api..amazonaws.com/prod?token=<jwt-userA>" Should connect successfully.
+Connect as userB (in a new terminal): wscat -c "wss://.execute-api..amazonaws.com/prod?token=<jwt-userB>"
+
+Send Message from userA to userB: In userA’s wscat session: json
+
+{"action": "sendMessage", "message": "Hi userB!", "recipient": "userB"} Expected: userB’s wscat receives "Hi userB!". Send Message from userB to userA: In userB’s wscat session: json {"action": "sendMessage", "message": "Hi userA!", "recipient": "userA"} Expected: userA’s wscat receives "Hi userA!".
+
+Disconnect: Type Ctrl+C in each wscat session to disconnect.
+
+
+4. Trade-Offs
+The application’s design balances performance, cost, complexity, and maintainability. Below are the key trade-offs, with pros, cons, and mitigations.
+
+4.1 Serverless Architecture (Lambda + API Gateway)
+
+Pros:
+Scales automatically with user load.
+Pay-per-use pricing reduces costs for low traffic.
+No server management.
+Cons:
+Cold starts may delay initial requests (milliseconds to seconds).
+Limited control over runtime environment.
+Debugging distributed systems is complex.
+Mitigation:
+Use Provisioned Concurrency for Lambda to reduce cold starts (increases cost).
+Comprehensive logging (added to WebSocketHandler, MessageService) aids debugging.
+SAM CLI for local testing (though WebSocket support is limited).
+4.2 DynamoDB
+
+Pros:
+Low-latency, scalable NoSQL storage.
+UserIdIndex enables fast connection lookups by userId.
+Pay-per-request billing aligns with serverless.
+Cons:
+Schema design (e.g., GSI) requires upfront planning.
+Query complexity for sendMessage (streaming, pagination).
+No joins, requiring careful data modeling.
+Mitigation:
+Enhanced DynamoDB SDK simplifies queries (QueryEnhancedRequest).
+Comments in MessageService explain schema (UserIdIndex).
+Monitor DynamoDB costs; switch to reserved capacity if usage grows.
+4.3 WebSocket vs. Polling
+
+Pros:
+Real-time, bidirectional communication.
+Efficient for chat (no constant polling).
+Cons:
+WebSocket connections consume API Gateway resources.
+Handling disconnections (stale connections) adds complexity.
+Mitigation:
+MessageService removes failed connections automatically.
+API Gateway’s idle timeout (30 minutes) ensures cleanup.
+Consider HTTP-based fallback for low-end clients (not implemented).
+4.4 Spring Boot DI
+
+Pros:
+Clean dependency management (MessageService, JwtUtil).
+Easy to mock for testing (MessageServiceTest).
+Familiar to us Java developers.
+Cons:
+Adds overhead to Lambda startup (minimal).
+Increases artifact size.
+Mitigation:
+Use lightweight Spring Boot configuration (no web server).
+Optimize dependencies in pom.xml (exclude unused modules).
+Test startup time locally with SAM.
+4.5 JWT Authentication
+
+Pros:
+Stateless, scalable authentication.
+Secures WebSocket $connect with minimal overhead.
+Cons:
+Token validation adds latency to $connect.
+No token refresh mechanism (assumed short-lived tokens).
+Mitigation:
+Optimize JwtUtil for fast validation (e.g., cache public keys if using RSA).
+Add /refresh endpoint if long-lived sessions are needed (future work).
+Log JWT errors clearly (in WebSocketHandler).

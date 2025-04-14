@@ -215,4 +215,4 @@ No token refresh mechanism (assumed short-lived tokens).
 Mitigation:
 Optimize JwtUtil for fast validation (e.g., cache public keys if using RSA).
 Add /refresh endpoint if long-lived sessions are needed (future work).
-Log JWT errors clearly (in WebSocketHandler).
+Log JWT errors clearly (in WebSocketHandler)..

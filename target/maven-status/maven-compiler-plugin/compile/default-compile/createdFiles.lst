@@ -1,9 +1,0 @@
-com/payaza/assessment/config/AppConfig.class
-com/payaza/assessment/service/MessageService.class
-com/payaza/assessment/repository/UserRepository.class
-com/payaza/assessment/model/User.class
-com/payaza/assessment/service/UserService.class
-com/payaza/assessment/security/JwtUtil.class
-com/payaza/assessment/model/Connection.class
-com/payaza/assessment/handler/UserHandler.class
-com/payaza/assessment/handler/WebSocketHandler.class

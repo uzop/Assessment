@@ -1,9 +1,0 @@
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/handler/WebSocketHandler.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/handler/UserHandler.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/model/User.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/service/UserService.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/config/AppConfig.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/model/Connection.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/service/MessageService.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/repository/UserRepository.java
-/Users/mac/Desktop/Assessment/src/main/java/com/payaza/assessment/security/JwtUtil.java

@@ -61,6 +61,7 @@ class MessageServiceTest {
         messageService = new MessageService(new ObjectMapper(), enhancedClient);
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void testBidirectionalMessaging() {
         // Setup userA and userB connections
@@ -80,19 +81,15 @@ class MessageServiceTest {
         when(userAPage.items()).thenReturn(Collections.singletonList(userAConn));
 
         // Mock SdkIterables
-        @SuppressWarnings("unchecked")
         SdkIterable<Page<Connection>> userBIterable = mock(SdkIterable.class);
         when(userBIterable.stream()).thenReturn(Stream.of(userBPage));
 
-        @SuppressWarnings("unchecked")
         SdkIterable<Page<Connection>> userAIterable = mock(SdkIterable.class);
         when(userAIterable.stream()).thenReturn(Stream.of(userAPage));
 
-        // Mock Publishers
-        @SuppressWarnings("unchecked")
-        Publisher<SdkIterable<Page<Connection>>> userBPublisher = mock(Publisher.class);
-        @SuppressWarnings("unchecked")
-        Publisher<SdkIterable<Page<Connection>>> userAPublisher = mock(Publisher.class);
+        // Mock Publishers (raw type to bypass generics)
+        Publisher userBPublisher = mock(Publisher.class);
+        Publisher userAPublisher = mock(Publisher.class);
 
         // Mock query to return Publishers
         when(userIdIndex.query(any(QueryEnhancedRequest.class)))
@@ -101,18 +98,18 @@ class MessageServiceTest {
 
         // Mock Publisher behavior
         doAnswer(invocation -> {
-            Subscriber<SdkIterable<Page<Connection>>> subscriber = invocation.getArgument(0);
+            Subscriber subscriber = invocation.getArgument(0);
             subscriber.onNext(userBIterable);
             subscriber.onComplete();
             return null;
-        }).when(userBPublisher).subscribe(any(Subscriber.class));
+        }).when(userBPublisher).subscribe(any());
 
         doAnswer(invocation -> {
-            Subscriber<SdkIterable<Page<Connection>>> subscriber = invocation.getArgument(0);
+            Subscriber subscriber = invocation.getArgument(0);
             subscriber.onNext(userAIterable);
             subscriber.onComplete();
             return null;
-        }).when(userAPublisher).subscribe(any(Subscriber.class));
+        }).when(userAPublisher).subscribe(any());
 
         // Test userA sending to userB
         messageService.sendMessage("Hi userB!", "conn1", "userB");
@@ -124,7 +121,7 @@ class MessageServiceTest {
         assertEquals("conn2", captorB.getValue().connectionId());
         assertEquals("Hi userB!", captorB.getValue().data().asUtf8String());
 
-        // Reset-Y apiClient mock
+        // Reset apiClient mock
         reset(apiClient);
 
         // Test userB sending to userA
